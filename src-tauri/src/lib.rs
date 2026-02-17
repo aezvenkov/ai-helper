@@ -36,21 +36,42 @@ fn start_interview_mode(
     user_device: Option<String>,
     interviewer_device: Option<String>
 ) {
-    println!("Starting Interview Mode (User: {:?}, Interviewer: {:?})", user_device, interviewer_device);
+    println!("═══════════════════════════════════════════");
+    println!("[Interview] Starting Interview Mode");
+    println!("[Interview] User device: {:?}", user_device);
+    println!("[Interview] Interviewer device: {:?}", interviewer_device);
+    println!("═══════════════════════════════════════════");
     
     let mut streams_vec = Vec::new();
     
-    if let Some(s) = audio::start_listening(app.clone(), "user".to_string(), user_device) {
-        streams_vec.push(s);
+    match audio::start_listening(app.clone(), "user".to_string(), user_device) {
+        Some(s) => {
+            println!("[Interview] ✓ User audio stream started");
+            streams_vec.push(s);
+        }
+        None => {
+            eprintln!("[Interview] ✗ Failed to start user audio stream");
+        }
     }
     
-    if let Some(s) = audio::start_listening(app.clone(), "interviewer".to_string(), interviewer_device) {
-        streams_vec.push(s);
+    match audio::start_listening(app.clone(), "interviewer".to_string(), interviewer_device) {
+        Some(s) => {
+            println!("[Interview] ✓ Interviewer audio stream started (loopback)");
+            streams_vec.push(s);
+        }
+        None => {
+            eprintln!("[Interview] ✗ Failed to start interviewer audio stream");
+            eprintln!("[Interview]   Hint: On Windows, select an output device (speakers/headphones)");
+            eprintln!("[Interview]   for the interviewer source. WASAPI will use loopback capture.");
+        }
     }
+    
+    println!("[Interview] Active streams: {}", streams_vec.len());
     
     let mut streams = state.0.lock().unwrap();
     *streams = Some(streams_vec);
 }
+
 
 #[tauri::command]
 fn stop_interview_mode(state: State<'_, InterviewStreams>) {
@@ -65,31 +86,24 @@ async fn capture_screenshot<R: Runtime>(_window: Window<R>) -> Result<String, St
     use screenshots::Screen;
     use image::{ImageEncoder, codecs::png::PngEncoder, ExtendedColorType};
     
-    // Получаем все экраны и берем первый (основной)
     let screens = Screen::all();
     
     if screens.is_empty() {
         return Err("No screens found".to_string());
     }
     
-    // Захватываем скриншот первого экрана
     let screen = &screens[0];
     let screenshot_image = screen.capture()
         .ok_or("Failed to capture screenshot")?;
     
-    // Получаем буфер изображения
-    // В версии 0.3 buffer() может возвращать уже PNG данные или сырые пиксели
     let buffer = screenshot_image.buffer();
     let width = screenshot_image.width();
     let height = screenshot_image.height();
     let expected_rgba_size = (width * height * 4) as usize;
     
-    // Определяем формат данных по размеру буфера
     let png_data = if buffer.len() < expected_rgba_size {
-        // Буфер меньше ожидаемого размера RGBA - вероятно, это уже сжатые данные (PNG)
         buffer.to_vec()
     } else {
-        // Буфер полного размера - конвертируем RGBA в PNG
         let mut png_vec = Vec::new();
         {
             let encoder = PngEncoder::new(&mut png_vec);
@@ -103,7 +117,6 @@ async fn capture_screenshot<R: Runtime>(_window: Window<R>) -> Result<String, St
         png_vec
     };
     
-    // Конвертируем в base64
     let base64_image = general_purpose::STANDARD.encode(&png_data);
     Ok(base64_image)
 }
