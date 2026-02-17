@@ -22,10 +22,11 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-http = "2"
 tauri-plugin-store = "2"
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 window-vibrancy = "0.5"
-winapi = { version = "0.3", features = ["winuser"] }
+winapi = { version = "0.3", features = ["winuser", "dwmapi", "uxtheme"] }
 cpal = "0.15"
 base64 = "0.21"
 hound = "3.5"

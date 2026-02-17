@@ -219,6 +219,47 @@
   box-shadow: 0 4px 14px rgba(45, 212, 191, 0.15);
 }
 
+/* ─── Stop Generation Button ─── */
+.btn-stop {
+  background: rgba(239, 68, 68, 0.2) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  color: #fca5a5 !important;
+  animation: stop-pulse 1.5s ease-in-out infinite;
+}
+
+.btn-stop:hover {
+  background: rgba(239, 68, 68, 0.35) !important;
+  color: #fef2f2 !important;
+}
+
+.btn-stop-mini {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px;
+  padding: 0 !important;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  animation: stop-pulse 1.5s ease-in-out infinite;
+}
+
+.btn-stop-mini:hover {
+  background: rgba(239, 68, 68, 0.35);
+  color: #fef2f2;
+}
+
+@keyframes stop-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
 /* ═══════════════════════════════
    MAIN CONTENT AREA
    ═══════════════════════════════ */
@@ -1052,15 +1093,18 @@
   }
 }
 
-/* ═══════════════════════════════
-   STEALTH CURSOR
-   When Ghost Mode is active, force the default arrow cursor
-   on ALL elements so screen capture viewers cannot tell the
-   user is interacting with a hidden window.
-   ═══════════════════════════════ */
 .stealth-cursor,
 .stealth-cursor *,
 .stealth-cursor *::before,
 .stealth-cursor *::after {
   cursor: default !important;
+}
+
+.see-through {
+  opacity: 0.25;
+  transition: opacity 0.2s ease;
+}
+
+.see-through:hover {
+  opacity: 0.65;
 }

@@ -18,7 +18,8 @@
         "height": 700,
         "resizable": true,
         "transparent": true,
-        "decorations": true
+        "decorations": true,
+        "skipTaskbar": true
       }
     ],
     "security": {

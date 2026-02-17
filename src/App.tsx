@@ -7,7 +7,7 @@ import {
   Settings as SettingsIcon, MessageSquare,
   Send, Cpu, Eye, EyeOff, RefreshCw,
   Mic, Volume2, BrainCircuit, Pin, PinOff,
-  ChevronDown, Camera
+  ChevronDown, Camera, Glasses, Square
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -40,6 +40,7 @@ function App() {
   const [isKeyVisible, setIsKeyVisible] = useState(false);
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
   const [isProtected, setIsProtected] = useState(true);
+  const [isSeeThrough, setIsSeeThrough] = useState(false);
 
   const [userAmp, setUserAmp] = useState(0);
   const [interAmp, setInterAmp] = useState(0);
@@ -49,6 +50,19 @@ function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const stopGeneration = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    if (typingTimerRef.current !== null) {
+      clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    setIsLoading(false);
+  };
 
   useEffect(() => {
     const unlisten = listen<AudioPayload>("audio-chunk", async (event) => {
@@ -61,7 +75,7 @@ function App() {
         const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
         const prompt = speaker === "interviewer"
           ? "Это голос интервьюера. Кратко переведи вопрос и дай 3 тезиса для ответа на русском."
-          : "Это мой голос. Проверь мой технический ответ на точность.";
+          : "Это мой голос. Игнорируй мой голос.";
 
         const response = await fetch(url, {
           method: "POST",
@@ -169,12 +183,19 @@ function App() {
 
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
+      abortRef.current = new AbortController();
       const r = await fetch(url, {
         method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({ contents: [{ parts: [{ text }] }] })
+        body: JSON.stringify({ contents: [{ parts: [{ text }] }] }),
+        signal: abortRef.current.signal
       });
+      if (!r.ok) {
+        const errorText = await r.text();
+        console.error(`API Error: ${r.status} ${errorText}`);
+        throw new Error(`API Error ${r.status}: ${errorText}`);
+      }
       const d = await r.json();
-      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "Error";
+      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "No text generated";
 
       setMessages(prev => [...prev, { role: "model", content: "" }]);
 
@@ -208,6 +229,7 @@ function App() {
       }, 14);
     } catch (e) {
       console.error(e);
+      setMessages(prev => [...prev, { role: "model", content: `❌ ${e instanceof Error ? e.message : String(e)}` }]);
       setIsLoading(false);
     }
   };
@@ -229,6 +251,7 @@ function App() {
       const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
       const prompt = "Проанализируй этот скриншот. Если видишь задачу, код, вопрос или проблему - помоги решить, объясни или дай рекомендации на русском языке.";
 
+      abortRef.current = new AbortController();
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
@@ -244,11 +267,16 @@ function App() {
               }
             ]
           }]
-        })
+        }),
+        signal: abortRef.current.signal
       });
 
+      if (!r.ok) {
+        const errText = await r.text();
+        throw new Error(`API Error ${r.status}: ${errText}`);
+      }
       const d = await r.json();
-      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "Error";
+      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "No analysis provided";
 
       setMessages(prev => [...prev, { role: "model", content: "" }]);
 
@@ -288,7 +316,11 @@ function App() {
   };
 
   return (
-    <div className={`app-shell${isProtected ? ' stealth-cursor' : ''}`}>
+    <div
+      className={`app-shell${isProtected ? ' stealth-cursor' : ''}${isSeeThrough ? ' see-through' : ''}`}
+      onMouseEnter={() => { if (isSeeThrough) invoke("set_window_opacity", { opacity: 0.7 }); }}
+      onMouseLeave={() => { if (isSeeThrough) invoke("set_window_opacity", { opacity: 0.3 }); }}
+    >
       {/* ─── Header ─── */}
       <header className="top-bar">
         <div className="top-bar-left">
@@ -333,6 +365,18 @@ function App() {
             title="Ghost mode (screen share protection)"
           >
             {isProtected ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          <button
+            id="btn-seethrough"
+            onClick={async () => {
+              const next = !isSeeThrough;
+              setIsSeeThrough(next);
+              await invoke("set_window_opacity", { opacity: next ? 0.3 : 1.0 });
+            }}
+            className={`btn-icon-m3 ${isSeeThrough ? 'active' : ''}`}
+            title="See-through mode"
+          >
+            <Glasses size={16} />
           </button>
           <button
             id="btn-screenshot"
@@ -419,9 +463,15 @@ function App() {
                   onKeyDown={e => e.key === 'Enter' && sendMessage()}
                   placeholder="Ask something..."
                 />
-                <button id="btn-send" onClick={sendMessage} className="btn-send-m3">
-                  <Send size={16} />
-                </button>
+                {isLoading ? (
+                  <button id="btn-stop" onClick={stopGeneration} className="btn-send-m3 btn-stop" title="Stop generation">
+                    <Square size={14} />
+                  </button>
+                ) : (
+                  <button id="btn-send" onClick={sendMessage} className="btn-send-m3">
+                    <Send size={16} />
+                  </button>
+                )}
               </div>
             </motion.div>
 
@@ -435,6 +485,11 @@ function App() {
                 <div className="voice-badges">
                   <div className={`voice-status-badge ${userAmp > 300 ? 'active' : 'inactive'}`}>User</div>
                   <div className={`voice-status-badge ${interAmp > 300 ? 'active system-active' : 'inactive'}`}>System</div>
+                  {isLoading && (
+                    <button onClick={stopGeneration} className="btn-icon-m3 btn-stop-mini" title="Stop generation">
+                      <Square size={12} />
+                    </button>
+                  )}
                 </div>
               </div>
 
