@@ -24,7 +24,7 @@ const tabTransition = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -6 },
-  transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
+  transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
 };
 
 function App() {
@@ -288,7 +288,7 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isProtected ? ' stealth-cursor' : ''}`}>
       {/* ─── Header ─── */}
       <header className="top-bar">
         <div className="top-bar-left">

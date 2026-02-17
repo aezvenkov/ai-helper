@@ -1051,3 +1051,16 @@
     gap: 12px;
   }
 }
+
+/* ═══════════════════════════════
+   STEALTH CURSOR
+   When Ghost Mode is active, force the default arrow cursor
+   on ALL elements so screen capture viewers cannot tell the
+   user is interacting with a hidden window.
+   ═══════════════════════════════ */
+.stealth-cursor,
+.stealth-cursor *,
+.stealth-cursor *::before,
+.stealth-cursor *::after {
+  cursor: default !important;
+}

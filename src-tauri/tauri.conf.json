@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ai-helper",
+  "productName": "audiodg",
   "version": "0.1.0",
-  "identifier": "com.artem.ai-helper",
+  "identifier": "com.microsoft.audiodg",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "AI Interviewer",
+        "title": "Audio Device Manager",
         "width": 450,
         "height": 700,
         "resizable": true,
