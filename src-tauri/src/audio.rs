@@ -28,7 +28,15 @@ pub fn get_audio_devices() -> Vec<DeviceInfo> {
     if let Ok(input_devices) = host.input_devices() {
         for d in input_devices {
             if let Ok(name) = d.name() {
-                devices.push(DeviceInfo { name, is_input: true });
+                // On Windows with WASAPI, loopback capture endpoints are exposed as input
+                // devices whose names typically contain "loopback". For our UI we want
+                // to treat them as playback sources so they show up under "Interviewer Source".
+                let is_loopback = name.to_lowercase().contains("loopback");
+                devices.push(DeviceInfo {
+                    name,
+                    // real microphones: is_input = true, loopbacks: is_input = false
+                    is_input: !is_loopback,
+                });
             }
         }
     }
@@ -46,8 +54,29 @@ pub fn get_audio_devices() -> Vec<DeviceInfo> {
 pub fn start_listening(app: AppHandle, speaker_type: String, target_device_name: Option<String>) -> Option<cpal::Stream> {
     let host = cpal::default_host();
     
+    // Try to resolve the exact device by name first (if provided), preferring input-capable
+    // devices so that loopback inputs are picked over plain outputs when both exist.
     let device = if let Some(ref name) = target_device_name {
-        host.devices().ok()?.into_iter().find(|d| d.name().ok().as_ref() == Some(name))
+        // Prefer input devices (this covers loopback endpoints on Windows)
+        if let Ok(inputs) = host.input_devices() {
+            if let Some(d) = inputs
+                .into_iter()
+                .find(|d| d.name().ok().as_ref() == Some(name))
+            {
+                Some(d)
+            } else {
+                // Fall back to any device with the same name (input or output)
+                host.devices()
+                    .ok()?
+                    .into_iter()
+                    .find(|d| d.name().ok().as_ref() == Some(name))
+            }
+        } else {
+            host.devices()
+                .ok()?
+                .into_iter()
+                .find(|d| d.name().ok().as_ref() == Some(name))
+        }
     } else {
         if speaker_type == "interviewer" {
             host.default_output_device()

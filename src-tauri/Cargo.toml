@@ -30,4 +30,6 @@ cpal = "0.15"
 base64 = "0.21"
 hound = "3.5"
 bytemuck = { version = "1.14", features = ["derive"] }
+screenshots = "0.3"
+image = "0.25"
 

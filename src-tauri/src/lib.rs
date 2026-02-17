@@ -59,6 +59,55 @@ fn stop_interview_mode(state: State<'_, InterviewStreams>) {
     *streams = None; 
 }
 
+#[tauri::command]
+async fn capture_screenshot<R: Runtime>(_window: Window<R>) -> Result<String, String> {
+    use base64::{Engine as _, engine::general_purpose};
+    use screenshots::Screen;
+    use image::{ImageEncoder, codecs::png::PngEncoder, ExtendedColorType};
+    
+    // Получаем все экраны и берем первый (основной)
+    let screens = Screen::all();
+    
+    if screens.is_empty() {
+        return Err("No screens found".to_string());
+    }
+    
+    // Захватываем скриншот первого экрана
+    let screen = &screens[0];
+    let screenshot_image = screen.capture()
+        .ok_or("Failed to capture screenshot")?;
+    
+    // Получаем буфер изображения
+    // В версии 0.3 buffer() может возвращать уже PNG данные или сырые пиксели
+    let buffer = screenshot_image.buffer();
+    let width = screenshot_image.width();
+    let height = screenshot_image.height();
+    let expected_rgba_size = (width * height * 4) as usize;
+    
+    // Определяем формат данных по размеру буфера
+    let png_data = if buffer.len() < expected_rgba_size {
+        // Буфер меньше ожидаемого размера RGBA - вероятно, это уже сжатые данные (PNG)
+        buffer.to_vec()
+    } else {
+        // Буфер полного размера - конвертируем RGBA в PNG
+        let mut png_vec = Vec::new();
+        {
+            let encoder = PngEncoder::new(&mut png_vec);
+            encoder.write_image(
+                &buffer,
+                width,
+                height,
+                ExtendedColorType::Rgba8,
+            ).map_err(|e| format!("Failed to encode PNG: {}", e))?;
+        }
+        png_vec
+    };
+    
+    // Конвертируем в base64
+    let base64_image = general_purpose::STANDARD.encode(&png_data);
+    Ok(base64_image)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let streams = InterviewStreams(Arc::new(Mutex::new(None)));
@@ -82,7 +131,8 @@ pub fn run() {
             set_always_on_top,
             start_interview_mode,
             stop_interview_mode,
-            get_audio_devices
+            get_audio_devices,
+            capture_screenshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

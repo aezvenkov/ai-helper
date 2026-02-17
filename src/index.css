@@ -1,345 +1,145 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/* ═══════════════════════════════════════════════════════════════
+   Interview Copilot – Design System Foundation
+   ═══════════════════════════════════════════════════════════════ */
 
 :root {
-    --m3-surface: rgba(10, 10, 18, 0.4);
-    --m3-primary: #a78bfa;
-    --m3-primary-glow: rgba(167, 139, 250, 0.3);
-    --m3-on-primary: #1e1b4b;
-    --m3-secondary: #818cf8;
-    --m3-container-user: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-    --m3-container-model: rgba(30, 30, 45, 0.6);
-    --m3-outline: rgba(255, 255, 255, 0.1);
-    --m3-outline-bright: rgba(255, 255, 255, 0.2);
-    --font-main: 'Plus Jakarta Sans', sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
-}
-
-/* Core Utils */
-.flex {
-    display: flex;
-}
-
-.flex-col {
-    flex-direction: column;
-}
-
-.flex-row {
-    flex-direction: row;
-}
-
-.flex-1 {
-    flex: 1;
-}
-
-.flex-shrink-0 {
-    flex-shrink: 0;
-}
-
-.flex-nowrap {
-    flex-wrap: nowrap;
-}
-
-.items-center {
-    align-items: center;
-}
-
-.justify-center {
-    justify-content: center;
-}
-
-.justify-between {
-    justify-content: space-between;
-}
-
-.relative {
-    position: relative;
-}
-
-.absolute {
-    position: absolute;
-}
-
-.right-4 {
-    right: 16px;
-}
-
-.top-1\/2 {
-    top: 50%;
-}
-
-.-translate-y-1\/2 {
-    transform: translateY(-50%);
-}
-
-/* Sizing */
-.h-screen {
-    height: 100vh;
-}
-
-.h-full {
-    height: 100%;
-}
-
-.w-full {
-    width: 100%;
-}
-
-.min-w-0 {
-    min-width: 0;
-}
-
-.min-h-0 {
-    min-height: 0;
-}
-
-/* Spacing */
-.gap-0\.5 {
-    gap: 2px;
-}
-
-.gap-1 {
-    gap: 4px;
-}
-
-.gap-1\.5 {
-    gap: 6px;
-}
-
-.gap-2 {
-    gap: 8px;
-}
-
-.gap-3 {
-    gap: 12px;
-}
-
-.gap-4 {
-    gap: 16px;
-}
-
-.p-1 {
-    padding: 4px;
-}
-
-.p-1\.5 {
-    padding: 6px;
-}
-
-.p-2\.5 {
-    padding: 10px;
-}
-
-.p-5 {
-    padding: 20px;
-}
-
-.p-8 {
-    padding: 32px;
-}
-
-.p-10 {
-    padding: 40px;
-}
-
-.px-1 {
-    padding-left: 4px;
-    padding-right: 4px;
-}
-
-.pr-12 {
-    padding-right: 48px;
-}
-
-.mt-1 {
-    margin-top: 4px;
-}
-
-.mt-2 {
-    margin-top: 8px;
-}
-
-.mt-3 {
-    margin-top: 12px;
-}
-
-.mt-10 {
-    margin-top: 40px;
-}
-
-.mb-3 {
-    margin-bottom: 12px;
-}
-
-.mb-4 {
-    margin-bottom: 16px;
-}
-
-.mb-6 {
-    margin-bottom: 24px;
-}
-
-.mb-8 {
-    margin-bottom: 32px;
-}
-
-/* Typography */
-.text-xs {
-    font-size: 0.75rem;
-}
-
-.text-sm {
-    font-size: 0.875rem;
-}
-
-.text-xl {
-    font-size: 1.25rem;
-}
-
-.text-\[10px\] {
-    font-size: 10px;
-}
-
-.font-bold {
-    font-weight: 700;
-}
-
-.font-medium {
-    font-weight: 500;
-}
-
-.font-mono {
-    font-family: var(--font-mono);
-}
-
-.tracking-tight {
-    letter-spacing: -0.025em;
-}
-
-.tracking-widest {
-    letter-spacing: 0.1em;
-}
-
-.tracking-wider {
-    letter-spacing: 0.05em;
-}
-
-.leading-tight {
-    line-height: 1.25;
-}
-
-.leading-none {
-    line-height: 1;
-}
-
-.uppercase {
-    text-transform: uppercase;
-}
-
-.truncate {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Colors & Effects */
-.text-white {
-    color: #fff;
-}
-
-.text-white\/90 {
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.text-slate-300 {
-    color: #cbd5e1;
-}
-
-.text-slate-400 {
-    color: #94a3b8;
-}
-
-.text-slate-500 {
-    color: #64748b;
-}
-
-.text-purple-400 {
-    color: #a78bfa;
-}
-
-.text-purple-400\/80 {
-    color: rgba(167, 139, 250, 0.8);
-}
-
-.text-emerald-400 {
-    color: #34d399;
-}
-
-.bg-black\/40 {
-    background-color: rgba(0, 0, 0, 0.4);
-}
-
-.bg-white\/5 {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.bg-white\/10 {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.opacity-40 {
-    opacity: 0.4;
-}
-
-.opacity-60 {
-    opacity: 0.6;
-}
-
-.opacity-80 {
-    opacity: 0.8;
-}
-
-.overflow-hidden {
-    overflow: hidden;
-}
-
-.overflow-y-auto {
-    overflow-y: auto;
-}
-
-* {
+    /* — Color Tokens — */
+    --color-bg: #08080f;
+    --color-surface: rgba(15, 17, 28, 0.85);
+    --color-surface-hover: rgba(255, 255, 255, 0.06);
+    --color-surface-raised: rgba(22, 24, 40, 0.92);
+
+    --color-border: rgba(255, 255, 255, 0.06);
+    --color-border-hover: rgba(255, 255, 255, 0.12);
+    --color-border-focus: rgba(129, 140, 248, 0.5);
+
+    --color-primary: #818cf8;
+    --color-primary-bright: #a78bfa;
+    --color-primary-dark: #6366f1;
+    --color-primary-glow: rgba(129, 140, 248, 0.18);
+
+    --color-accent: #a855f7;
+    --color-success: #34d399;
+    --color-success-glow: rgba(52, 211, 153, 0.15);
+
+    --color-text: #f1f5f9;
+    --color-text-secondary: #94a3b8;
+    --color-text-muted: rgba(148, 163, 184, 0.6);
+
+    --gradient-user: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    --gradient-model: rgba(22, 24, 40, 0.5);
+    --gradient-hero: radial-gradient(ellipse at 20% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 100%, rgba(168, 85, 247, 0.08) 0%, transparent 50%);
+
+    /* — Typography — */
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* — Radii — */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-pill: 9999px;
+
+    /* — Shadows — */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+    --shadow-glow: 0 0 24px var(--color-primary-glow);
+
+    /* — Transitions — */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --duration: 0.2s;
+}
+
+/* ─── Reset ─── */
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
+html,
 body {
-    font-family: var(--font-main);
-    background: transparent;
-    color: #f8fafc;
-    height: 100vh;
-    width: 100vw;
+    height: 100%;
+    width: 100%;
     overflow: hidden;
-    background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.15), transparent 40%),
-        radial-gradient(circle at bottom left, rgba(168, 85, 247, 0.1), transparent 40%);
+}
+
+body {
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: var(--color-bg);
+    background-image: var(--gradient-hero);
+    color: var(--color-text);
+    line-height: 1.5;
 }
 
 #root {
     height: 100%;
 }
 
-.m3-surface {
-    background: var(--m3-surface);
-    backdrop-filter: blur(30px) saturate(150%);
-    -webkit-backdrop-filter: blur(30px) saturate(150%);
-    border: 1px solid var(--m3-outline);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+    width: 5px;
 }
 
-::-webkit-scrollbar {
-    width: 4px;
+::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--m3-outline-bright);
-    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-pill);
+    transition: background var(--duration) ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+/* ─── Selection ─── */
+::selection {
+    background: var(--color-primary-glow);
+    color: white;
+}
+
+/* ─── Focus ring ─── */
+:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+}
+
+/* ─── Button reset ─── */
+button {
+    font-family: inherit;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* ─── Input / Select reset ─── */
+input,
+select,
+textarea {
+    font-family: inherit;
+    color: inherit;
+}
+
+select option {
+    background: #12121e;
+    color: white;
 }

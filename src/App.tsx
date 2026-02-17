@@ -7,7 +7,7 @@ import {
   Settings as SettingsIcon, MessageSquare,
   Send, Cpu, Eye, EyeOff, RefreshCw,
   Mic, Volume2, BrainCircuit, Pin, PinOff,
-  ChevronDown
+  ChevronDown, Camera
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -19,6 +19,13 @@ interface AudioPayload { speaker: string; data: string; amplitude: number; }
 interface DeviceInfo { name: string; is_input: boolean; }
 
 const STORE_PATH = "settings.dat";
+
+const tabTransition = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+  transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
+};
 
 function App() {
   const [apiKey, setApiKey] = useState("");
@@ -41,6 +48,7 @@ function App() {
   const [interviewerDevice, setInterviewerDevice] = useState<string>("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const typingTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const unlisten = listen<AudioPayload>("audio-chunk", async (event) => {
@@ -149,34 +157,159 @@ function App() {
 
   const sendMessage = async () => {
     if (!input.trim() || !apiKey || isLoading) return;
-    setMessages(prev => [...prev, { role: "user", content: input }]);
-    setInput(""); setIsLoading(true);
+    const text = input;
+    setMessages(prev => [...prev, { role: "user", content: text }]);
+    setInput("");
+    setIsLoading(true);
+
+    if (typingTimerRef.current !== null) {
+      clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
       const r = await fetch(url, {
         method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({ contents: [{ parts: [{ text: input }] }] })
+        body: JSON.stringify({ contents: [{ parts: [{ text }] }] })
       });
       const d = await r.json();
-      setMessages(prev => [...prev, { role: "model", content: d.candidates?.[0]?.content?.parts?.[0]?.text || "Error" }]);
-    } catch (e) { console.error(e); } finally { setIsLoading(false); }
+      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "Error";
+
+      setMessages(prev => [...prev, { role: "model", content: "" }]);
+
+      const full = answer;
+      let index = 0;
+
+      typingTimerRef.current = window.setInterval(() => {
+        index += 2;
+
+        setMessages(prev => {
+          if (prev.length === 0) return prev;
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (!last || last.role !== "model") return prev;
+          next[next.length - 1] = { ...last, content: full.slice(0, index) };
+          return next;
+        });
+
+        if (scrollRef.current) {
+          const el = scrollRef.current;
+          el.scrollTop = el.scrollHeight;
+        }
+
+        if (index >= full.length) {
+          if (typingTimerRef.current !== null) {
+            clearInterval(typingTimerRef.current);
+            typingTimerRef.current = null;
+          }
+          setIsLoading(false);
+        }
+      }, 14);
+    } catch (e) {
+      console.error(e);
+      setIsLoading(false);
+    }
+  };
+
+  const captureAndAnalyze = async () => {
+    if (!apiKey || isLoading) return;
+    setIsLoading(true);
+
+    if (typingTimerRef.current !== null) {
+      clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+
+    try {
+      const screenshotBase64 = await invoke<string>("capture_screenshot");
+
+      setMessages(prev => [...prev, { role: "user", content: "📷 [Screenshot captured]" }]);
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
+      const prompt = "Проанализируй этот скриншот. Если видишь задачу, код, вопрос или проблему - помоги решить, объясни или дай рекомендации на русском языке.";
+
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "image/png",
+                  data: screenshotBase64
+                }
+              }
+            ]
+          }]
+        })
+      });
+
+      const d = await r.json();
+      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "Error";
+
+      setMessages(prev => [...prev, { role: "model", content: "" }]);
+
+      const full = answer;
+      let index = 0;
+
+      typingTimerRef.current = window.setInterval(() => {
+        index += 2;
+
+        setMessages(prev => {
+          if (prev.length === 0) return prev;
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (!last || last.role !== "model") return prev;
+          next[next.length - 1] = { ...last, content: full.slice(0, index) };
+          return next;
+        });
+
+        if (scrollRef.current) {
+          const el = scrollRef.current;
+          el.scrollTop = el.scrollHeight;
+        }
+
+        if (index >= full.length) {
+          if (typingTimerRef.current !== null) {
+            clearInterval(typingTimerRef.current);
+            typingTimerRef.current = null;
+          }
+          setIsLoading(false);
+        }
+      }, 14);
+    } catch (e) {
+      console.error(e);
+      setMessages(prev => [...prev, { role: "model", content: `Ошибка при захвате скриншота: ${e}` }]);
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="app-shell">
+      {/* ─── Header ─── */}
       <header className="top-bar">
-        <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-br from-violet-600 to-indigo-700 p-2 rounded-xl shadow-lg border border-white/10">
-            <Cpu size={18} className="text-white" />
+        <div className="top-bar-left">
+          <div className="top-bar-icon">
+            <Cpu size={18} />
           </div>
-          <div>
-            <h1 className="text-[13px] font-black text-white leading-tight">AI Assistant</h1>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[8px] text-purple-400 font-bold uppercase tracking-wider">{selectedModel.split('/').pop()}</span>
+          <div className="top-bar-text">
+            <div className="top-bar-title-row">
+              <h1 className="top-bar-title">Interview Copilot</h1>
+              <span className="top-bar-badge">Stealth</span>
+            </div>
+            <div className="top-bar-subtitle-row">
+              <span className="model-chip">{selectedModel.split('/').pop()}</span>
               {isVoiceActive && (
-                <div className="flex gap-0.5 items-end h-2">
+                <div className="voice-meter">
                   {[1, 2, 3].map(i => (
-                    <motion.div key={i} animate={{ height: Math.max(2, Math.min(8, (userAmp / 5000) * (i * 2))) }} className="w-0.5 bg-emerald-400 rounded-full" />
+                    <motion.div
+                      key={i}
+                      animate={{ height: Math.max(2, Math.min(10, (userAmp / 5000) * (i * 2))) }}
+                      className="voice-meter-bar"
+                    />
                   ))}
                 </div>
               )}
@@ -184,115 +317,257 @@ function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button onClick={toggleAlwaysOnTop} className={`btn-icon-m3 ${isAlwaysOnTop ? 'active' : ''}`} title="Always on Top">
+        <div className="top-bar-actions">
+          <button
+            id="btn-pin"
+            onClick={toggleAlwaysOnTop}
+            className={`btn-icon-m3 ${isAlwaysOnTop ? "active" : ""}`}
+            title="Always on top"
+          >
             {isAlwaysOnTop ? <Pin size={16} /> : <PinOff size={16} />}
           </button>
-          <button onClick={toggleVoiceMode} className={`btn-icon-m3 ${isVoiceActive ? 'active !text-emerald-400' : ''}`} title="Voice Mode">
+          <button
+            id="btn-ghost"
+            onClick={toggleProtection}
+            className={`btn-icon-m3 ghost-toggle ${isProtected ? "active" : ""}`}
+            title="Ghost mode (screen share protection)"
+          >
+            {isProtected ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          <button
+            id="btn-screenshot"
+            onClick={captureAndAnalyze}
+            className={`btn-icon-m3 ${isLoading ? "active" : ""}`}
+            title="Capture screenshot & analyze"
+            disabled={isLoading || !apiKey}
+          >
+            <Camera size={16} />
+          </button>
+          <button
+            id="btn-voice"
+            onClick={toggleVoiceMode}
+            className={`btn-icon-m3 primary ${isVoiceActive ? "active" : ""}`}
+            title="Voice hints"
+          >
             <Mic size={16} />
           </button>
-          <div className="w-px h-6 bg-white/10 mx-1" />
-          <button onClick={() => setActiveTab("chat")} className={`btn-icon-m3 ${activeTab === 'chat' ? 'active' : ''}`}><MessageSquare size={16} /></button>
-          <button onClick={() => setActiveTab("voice")} className={`btn-icon-m3 ${activeTab === 'voice' ? 'active' : ''}`}><BrainCircuit size={16} /></button>
-          <button onClick={() => setActiveTab("settings")} className={`btn-icon-m3 ${activeTab === 'settings' ? 'active' : ''}`}><SettingsIcon size={16} /></button>
         </div>
       </header>
 
+      {/* ─── Main Content ─── */}
       <main className="main-content">
+        <div className="tab-strip">
+          <button
+            id="tab-chat"
+            className={`tab-pill ${activeTab === "chat" ? "active" : ""}`}
+            onClick={() => setActiveTab("chat")}
+          >
+            <MessageSquare size={14} />
+            <span>Chat</span>
+          </button>
+          <button
+            id="tab-voice"
+            className={`tab-pill ${activeTab === "voice" ? "active" : ""}`}
+            onClick={() => setActiveTab("voice")}
+          >
+            <BrainCircuit size={14} />
+            <span>Voice Hints</span>
+          </button>
+          <button
+            id="tab-settings"
+            className={`tab-pill ${activeTab === "settings" ? "active" : ""}`}
+            onClick={() => setActiveTab("settings")}
+          >
+            <SettingsIcon size={14} />
+            <span>Settings</span>
+          </button>
+        </div>
+
         <AnimatePresence mode="wait">
+          {/* ─── Chat Tab ─── */}
           {activeTab === "chat" ? (
-            <motion.div key="chat" className="flex-1 flex flex-col h-full overflow-hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div ref={scrollRef} className="chat-container custom-scrollbar">
+            <motion.div key="chat" className="chat-wrapper" {...tabTransition}>
+              <div ref={scrollRef} className="chat-container">
+                {messages.length === 0 && !isLoading && (
+                  <div className="chat-empty">
+                    <div className="chat-empty-icon">
+                      <MessageSquare size={22} />
+                    </div>
+                    <div className="chat-empty-text">
+                      Ask a question or capture a screenshot to get started
+                    </div>
+                  </div>
+                )}
                 {messages.map((m, i) => (
                   <div key={i} className={`m3-bubble ${m.role === 'user' ? 'bubble-user' : 'bubble-model'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                   </div>
                 ))}
-                {isLoading && <div className="typing-dots"><div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" /></div>}
+                {isLoading && (
+                  <div className="typing-dots">
+                    <div className="typing-dot" />
+                    <div className="typing-dot" />
+                    <div className="typing-dot" />
+                  </div>
+                )}
               </div>
               <div className="input-field-container">
-                <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMessage()} placeholder="Ask something..." />
-                <button onClick={sendMessage} className="btn-send-m3"><Send size={16} /></button>
+                <input
+                  id="chat-input"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                  placeholder="Ask something..."
+                />
+                <button id="btn-send" onClick={sendMessage} className="btn-send-m3">
+                  <Send size={16} />
+                </button>
               </div>
             </motion.div>
+
+            /* ─── Voice Tab ─── */
           ) : activeTab === "voice" ? (
-            <motion.div key="voice" className="p-6 h-full flex flex-col" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-black flex items-center gap-2"><BrainCircuit className="text-purple-400" /> Hints</h2>
-                <div className="flex gap-2">
-                  <div className={`p-1 px-3 rounded-lg text-[9px] uppercase font-black border tracking-wider ${userAmp > 300 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-white/20 border-white/5'}`}>User</div>
-                  <div className={`p-1 px-3 rounded-lg text-[9px] uppercase font-black border tracking-wider ${interAmp > 300 ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-white/5 text-white/20 border-white/5'}`}>System</div>
+            <motion.div key="voice" className="voice-tab-content" {...tabTransition}>
+              <div className="voice-header">
+                <h2 className="voice-header-title">
+                  <BrainCircuit size={18} /> Hints
+                </h2>
+                <div className="voice-badges">
+                  <div className={`voice-status-badge ${userAmp > 300 ? 'active' : 'inactive'}`}>User</div>
+                  <div className={`voice-status-badge ${interAmp > 300 ? 'active system-active' : 'inactive'}`}>System</div>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-4">
-                {suggestions.length === 0 && <div className="flex-1 flex flex-col items-center justify-center opacity-10"><Volume2 size={40} /></div>}
+
+              <div className="voice-hints-list">
+                {suggestions.length === 0 && (
+                  <div className="voice-empty">
+                    <div className="voice-empty-card">
+                      <Volume2 size={28} />
+                      <div className="voice-empty-info">
+                        <div className="voice-empty-title">Waiting for interview</div>
+                        <div className="voice-empty-desc">
+                          Start Zoom / Google Meet and say something. The app will auto-generate hints here.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {suggestions.map((s, i) => (
-                  <motion.div key={i} initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="settings-card-m3 border-l-4 border-l-purple-500 p-4">
+                  <motion.div
+                    key={i}
+                    initial={{ x: -12, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    className="settings-card-m3 voice-hint-card"
+                  >
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{s}</ReactMarkdown>
                   </motion.div>
                 ))}
               </div>
             </motion.div>
-          ) : (
-            <motion.div key="settings" className="p-6 h-full overflow-y-auto custom-scrollbar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h2 className="text-xl font-black mb-6">Settings</h2>
 
+            /* ─── Settings Tab ─── */
+          ) : (
+            <motion.div key="settings" className="settings-container" {...tabTransition}>
+              <h2 className="settings-title">Settings</h2>
+
+              {/* Model selector */}
               <div className="settings-card-m3">
-                <span className="m3-label font-black text-purple-400">Selected AI Model</span>
-                <div className="relative">
-                  <select value={selectedModel} onChange={e => { setSelectedModel(e.target.value); saveSettings("selected_model", e.target.value); }} className="m3-input-text appearance-none pr-10">
+                <span className="m3-label">Selected AI Model</span>
+                <div className="select-wrapper">
+                  <select
+                    id="select-model"
+                    value={selectedModel}
+                    onChange={e => { setSelectedModel(e.target.value); saveSettings("selected_model", e.target.value); }}
+                    className="m3-input-text"
+                  >
                     {models.length > 0 ? (
                       models.map(m => <option key={m.name} value={m.name}>{m.displayName || m.name}</option>)
                     ) : (
                       <option value="models/gemini-1.5-flash">Gemini 1.5 Flash (Default)</option>
                     )}
                   </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                  <ChevronDown size={14} className="select-arrow" />
                 </div>
               </div>
 
+              {/* API Key */}
               <div className="settings-card-m3">
-                <span className="m3-label">API KEY</span>
-                <div className="relative">
-                  <input type={isKeyVisible ? "text" : "password"} value={apiKey} onChange={e => { setApiKey(e.target.value); saveSettings("api_key", e.target.value); }} className="m3-input-text pr-10" />
-                  <button onClick={() => setIsKeyVisible(!isKeyVisible)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+                <span className="m3-label">API Key</span>
+                <div className="api-key-wrapper">
+                  <input
+                    id="input-api-key"
+                    type={isKeyVisible ? "text" : "password"}
+                    value={apiKey}
+                    onChange={e => { setApiKey(e.target.value); saveSettings("api_key", e.target.value); }}
+                    className="m3-input-text"
+                  />
+                  <button onClick={() => setIsKeyVisible(!isKeyVisible)} className="api-key-toggle">
                     {isKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
 
+              {/* User microphone */}
               <div className="settings-card-m3">
                 <span className="m3-label">My Microphone</span>
-                <select value={userDevice} onChange={e => { setUserDevice(e.target.value); saveSettings("user_device", e.target.value); }} className="m3-input-text">
+                <select
+                  id="select-mic"
+                  value={userDevice}
+                  onChange={e => { setUserDevice(e.target.value); saveSettings("user_device", e.target.value); }}
+                  className="m3-input-text"
+                >
                   <option value="">Default Input</option>
                   {devices.filter(d => d.is_input).map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
                 </select>
               </div>
 
+              {/* Interviewer source */}
               <div className="settings-card-m3">
                 <span className="m3-label">Interviewer Source</span>
-                <select value={interviewerDevice} onChange={e => { setInterviewerDevice(e.target.value); saveSettings("interviewer_device", e.target.value); }} className="m3-input-text">
+                <select
+                  id="select-interviewer"
+                  value={interviewerDevice}
+                  onChange={e => { setInterviewerDevice(e.target.value); saveSettings("interviewer_device", e.target.value); }}
+                  className="m3-input-text"
+                >
                   <option value="">Default Output</option>
-                  <optgroup label="Playback (Loopback)">
-                    {devices.filter(d => !d.is_input).map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                  <optgroup label="System / Loopback (Zoom, Meet)">
+                    {devices
+                      .filter(d => !d.is_input && d.name.toLowerCase().includes("loopback"))
+                      .map(d => (
+                        <option key={d.name} value={d.name}>{d.name}</option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="Speakers / Headphones">
+                    {devices
+                      .filter(d => !d.is_input && !d.name.toLowerCase().includes("loopback"))
+                      .map(d => (
+                        <option key={d.name} value={d.name}>{d.name}</option>
+                      ))}
                   </optgroup>
                   <optgroup label="Direct Inputs">
-                    {devices.filter(d => d.is_input).map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                    {devices
+                      .filter(d => d.is_input)
+                      .map(d => (
+                        <option key={d.name} value={d.name}>{d.name}</option>
+                      ))}
                   </optgroup>
                 </select>
               </div>
 
-              <div className="settings-card-m3 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-sm">Ghost Mode</div>
-                  <div className="text-[10px] text-white/40">Protect window from sharing</div>
+              {/* Ghost mode toggle */}
+              <div className="settings-card-m3 settings-toggle-card">
+                <div className="settings-toggle-info">
+                  <div className="settings-toggle-title">Ghost Mode</div>
+                  <div className="settings-toggle-desc">Protect window from sharing</div>
                 </div>
                 <div onClick={toggleProtection} className={`m3-toggle ${isProtected ? 'active' : ''}`}>
                   <div className="m3-toggle-ball" />
                 </div>
               </div>
 
-              <button onClick={refreshDevices} className="btn-refresh mt-4">
+              <button id="btn-refresh-devices" onClick={refreshDevices} className="btn-refresh">
                 <RefreshCw size={14} /> Refresh Devices
               </button>
             </motion.div>
