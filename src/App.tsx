@@ -64,6 +64,9 @@ function App() {
     setIsLoading(false);
   };
 
+  // Returns tooltip text only when Ghost Mode is off
+  const tip = (text: string) => isProtected ? undefined : text;
+
   useEffect(() => {
     const unlisten = listen<AudioPayload>("audio-chunk", async (event) => {
       const { speaker, data, amplitude } = event.payload;
@@ -354,7 +357,7 @@ function App() {
             id="btn-pin"
             onClick={toggleAlwaysOnTop}
             className={`btn-icon-m3 ${isAlwaysOnTop ? "active" : ""}`}
-            title="Always on top"
+            title={tip("Always on top")}
           >
             {isAlwaysOnTop ? <Pin size={16} /> : <PinOff size={16} />}
           </button>
@@ -362,7 +365,7 @@ function App() {
             id="btn-ghost"
             onClick={toggleProtection}
             className={`btn-icon-m3 ghost-toggle ${isProtected ? "active" : ""}`}
-            title="Ghost mode (screen share protection)"
+            title={tip("Ghost mode (screen share protection)")}
           >
             {isProtected ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
@@ -374,7 +377,7 @@ function App() {
               await invoke("set_window_opacity", { opacity: next ? 0.3 : 1.0 });
             }}
             className={`btn-icon-m3 ${isSeeThrough ? 'active' : ''}`}
-            title="See-through mode"
+            title={tip("See-through mode")}
           >
             <Glasses size={16} />
           </button>
@@ -382,7 +385,7 @@ function App() {
             id="btn-screenshot"
             onClick={captureAndAnalyze}
             className={`btn-icon-m3 ${isLoading ? "active" : ""}`}
-            title="Capture screenshot & analyze"
+            title={tip("Capture screenshot & analyze")}
             disabled={isLoading || !apiKey}
           >
             <Camera size={16} />
@@ -391,7 +394,7 @@ function App() {
             id="btn-voice"
             onClick={toggleVoiceMode}
             className={`btn-icon-m3 primary ${isVoiceActive ? "active" : ""}`}
-            title="Voice hints"
+            title={tip("Voice hints")}
           >
             <Mic size={16} />
           </button>
@@ -464,7 +467,7 @@ function App() {
                   placeholder="Ask something..."
                 />
                 {isLoading ? (
-                  <button id="btn-stop" onClick={stopGeneration} className="btn-send-m3 btn-stop" title="Stop generation">
+                  <button id="btn-stop" onClick={stopGeneration} className="btn-send-m3 btn-stop" title={tip("Stop generation")}>
                     <Square size={14} />
                   </button>
                 ) : (
@@ -486,7 +489,7 @@ function App() {
                   <div className={`voice-status-badge ${userAmp > 300 ? 'active' : 'inactive'}`}>User</div>
                   <div className={`voice-status-badge ${interAmp > 300 ? 'active system-active' : 'inactive'}`}>System</div>
                   {isLoading && (
-                    <button onClick={stopGeneration} className="btn-icon-m3 btn-stop-mini" title="Stop generation">
+                    <button onClick={stopGeneration} className="btn-icon-m3 btn-stop-mini" title={tip("Stop generation")}>
                       <Square size={12} />
                     </button>
                   )}
