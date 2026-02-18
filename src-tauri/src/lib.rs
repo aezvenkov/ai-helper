@@ -69,26 +69,14 @@ fn toggle_screen_share_protection<R: Runtime>(window: Window<R>, enabled: bool) 
 fn start_interview_mode(
     app: tauri::AppHandle, 
     state: State<'_, InterviewStreams>,
-    user_device: Option<String>,
     interviewer_device: Option<String>
 ) {
     println!("═══════════════════════════════════════════");
-    println!("[Interview] Starting Interview Mode");
-    println!("[Interview] User device: {:?}", user_device);
+    println!("[Interview] Starting Interview Mode (interviewer only)");
     println!("[Interview] Interviewer device: {:?}", interviewer_device);
     println!("═══════════════════════════════════════════");
     
     let mut streams_vec = Vec::new();
-    
-    match audio::start_listening(app.clone(), "user".to_string(), user_device) {
-        Some(s) => {
-            println!("[Interview] ✓ User audio stream started");
-            streams_vec.push(s);
-        }
-        None => {
-            eprintln!("[Interview] ✗ Failed to start user audio stream");
-        }
-    }
     
     match audio::start_listening(app.clone(), "interviewer".to_string(), interviewer_device) {
         Some(s) => {

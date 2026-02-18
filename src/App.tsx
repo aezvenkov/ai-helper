@@ -42,10 +42,8 @@ function App() {
   const [isProtected, setIsProtected] = useState(true);
   const [isSeeThrough, setIsSeeThrough] = useState(false);
 
-  const [userAmp, setUserAmp] = useState(0);
   const [interAmp, setInterAmp] = useState(0);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
-  const [userDevice, setUserDevice] = useState<string>("");
   const [interviewerDevice, setInterviewerDevice] = useState<string>("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -70,15 +68,19 @@ function App() {
   useEffect(() => {
     const unlisten = listen<AudioPayload>("audio-chunk", async (event) => {
       const { speaker, data, amplitude } = event.payload;
-      if (speaker === "user") setUserAmp(amplitude);
-      if (speaker === "interviewer") setInterAmp(amplitude);
+      // Only process interviewer audio — user mic is not captured
+      if (speaker !== "interviewer") return;
+      setInterAmp(amplitude);
       if (!isVoiceActive || !apiKey || !data) return;
 
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
-        const prompt = speaker === "interviewer"
-          ? "Это голос интервьюера. Кратко переведи вопрос и дай 3 тезиса для ответа на русском."
-          : "Это мой голос. Игнорируй мой голос.";
+        const prompt = `Это голос интервьюера на собеседовании. Сделай следующее БЫСТРО и КРАТКО:
+1. **Вопрос**: Переведи/перескажи вопрос в 1-2 предложениях
+2. **Ключевые слова**: Выдели 2-3 технических термина из вопроса
+3. **Тезисы для ответа**: Дай 3-4 коротких тезиса, как лучше ответить
+4. **Пример ответа**: Короткий пример ответа в 2-3 предложениях
+Отвечай на русском. Будь максимально лаконичен.`;
 
         const response = await fetch(url, {
           method: "POST",
@@ -105,14 +107,12 @@ function App() {
     load(STORE_PATH).then(async s => {
       const k = await s.get<string>("api_key");
       const m = await s.get<string>("selected_model");
-      const ud = await s.get<string>("user_device");
       const id = await s.get<string>("interviewer_device");
       const pinned = await s.get<boolean>("always_on_top");
       const prot = await s.get<boolean>("screen_protection");
 
       if (k) { setApiKey(k); fetchModels(k); }
       if (m) setSelectedModel(m);
-      if (ud) setUserDevice(ud || "");
       if (id) setInterviewerDevice(id || "");
       if (pinned !== undefined) {
         setIsAlwaysOnTop(pinned);
@@ -144,12 +144,11 @@ function App() {
     setIsVoiceActive(newState);
     if (newState) {
       await invoke("start_interview_mode", {
-        userDevice: userDevice || null,
         interviewerDevice: interviewerDevice || null
       });
       setActiveTab("voice");
     }
-    else { await invoke("stop_interview_mode"); setUserAmp(0); setInterAmp(0); }
+    else { await invoke("stop_interview_mode"); setInterAmp(0); }
   };
 
   const toggleAlwaysOnTop = async () => {
@@ -342,7 +341,7 @@ function App() {
                   {[1, 2, 3].map(i => (
                     <motion.div
                       key={i}
-                      animate={{ height: Math.max(2, Math.min(10, (userAmp / 5000) * (i * 2))) }}
+                      animate={{ height: Math.max(2, Math.min(10, (interAmp / 5000) * (i * 2))) }}
                       className="voice-meter-bar"
                     />
                   ))}
@@ -486,8 +485,7 @@ function App() {
                   <BrainCircuit size={18} /> Hints
                 </h2>
                 <div className="voice-badges">
-                  <div className={`voice-status-badge ${userAmp > 300 ? 'active' : 'inactive'}`}>User</div>
-                  <div className={`voice-status-badge ${interAmp > 300 ? 'active system-active' : 'inactive'}`}>System</div>
+                  <div className={`voice-status-badge ${interAmp > 300 ? 'active system-active' : 'inactive'}`}>Interviewer</div>
                   {isLoading && (
                     <button onClick={stopGeneration} className="btn-icon-m3 btn-stop-mini" title={tip("Stop generation")}>
                       <Square size={12} />
@@ -566,19 +564,7 @@ function App() {
                 </div>
               </div>
 
-              {/* User microphone */}
-              <div className="settings-card-m3">
-                <span className="m3-label">My Microphone</span>
-                <select
-                  id="select-mic"
-                  value={userDevice}
-                  onChange={e => { setUserDevice(e.target.value); saveSettings("user_device", e.target.value); }}
-                  className="m3-input-text"
-                >
-                  <option value="">Default Input</option>
-                  {devices.filter(d => d.is_input).map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
-                </select>
-              </div>
+
 
               {/* Interviewer source */}
               <div className="settings-card-m3">
