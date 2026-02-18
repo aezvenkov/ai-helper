@@ -184,7 +184,12 @@ pub fn run() {
                         .with_handler(move |app, shortcut, event| {
                             if shortcut == &toggle_shortcut && event.state() == ShortcutState::Pressed {
                                 if let Some(win) = app.get_webview_window("main") {
-                                    if win.is_visible().unwrap_or(false) {
+                                    if win.is_minimized().unwrap_or(false) {
+                                        // Window is minimized — restore it
+                                        let _ = win.unminimize();
+                                        let _ = win.show();
+                                        let _ = win.set_focus();
+                                    } else if win.is_visible().unwrap_or(false) {
                                         let _ = win.hide();
                                     } else {
                                         let _ = win.show();

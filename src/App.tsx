@@ -17,8 +17,10 @@ import "./App.css";
 interface ChatMessage { role: "user" | "model" | "system"; content: string; }
 interface AudioPayload { speaker: string; data: string; amplitude: number; }
 interface DeviceInfo { name: string; is_input: boolean; }
+interface VoiceHint { id: number; text: string; }
 
 const STORE_PATH = "settings.dat";
+let hintIdCounter = 0;
 
 const tabTransition = {
   initial: { opacity: 0, y: 8 },
@@ -33,7 +35,7 @@ function App() {
   const [selectedModel, setSelectedModel] = useState("models/gemini-1.5-flash");
   const [activeTab, setActiveTab] = useState<"chat" | "settings" | "voice">("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<VoiceHint[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
@@ -47,7 +49,6 @@ function App() {
   const [interviewerDevice, setInterviewerDevice] = useState<string>("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const typingTimerRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const stopGeneration = () => {
@@ -55,15 +56,57 @@ function App() {
       abortRef.current.abort();
       abortRef.current = null;
     }
-    if (typingTimerRef.current !== null) {
-      clearInterval(typingTimerRef.current);
-      typingTimerRef.current = null;
-    }
     setIsLoading(false);
   };
 
   // Returns tooltip text only when Ghost Mode is off
   const tip = (text: string) => isProtected ? undefined : text;
+
+  // ── SSE Stream helper ──
+  const streamSSE = async (
+    url: string,
+    body: any,
+    onChunk: (text: string) => void,
+    signal?: AbortSignal
+  ): Promise<void> => {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      throw new Error(`API Error ${r.status}: ${errText}`);
+    }
+
+    const reader = r.body?.getReader();
+    if (!reader) throw new Error("No response body");
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE events from buffer
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || ""; // keep incomplete line
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) continue;
+        const jsonStr = trimmed.slice(6);
+        if (!jsonStr || jsonStr === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const chunk = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (chunk) onChunk(chunk);
+        } catch { /* skip malformed JSON */ }
+      }
+    }
+  };
 
   useEffect(() => {
     const unlisten = listen<AudioPayload>("audio-chunk", async (event) => {
@@ -74,30 +117,77 @@ function App() {
       if (!isVoiceActive || !apiKey || !data) return;
 
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
-        const prompt = `Это голос интервьюера на собеседовании. Сделай следующее БЫСТРО и КРАТКО:
-1. **Вопрос**: Переведи/перескажи вопрос в 1-2 предложениях
-2. **Ключевые слова**: Выдели 2-3 технических термина из вопроса
-3. **Тезисы для ответа**: Дай 3-4 коротких тезиса, как лучше ответить
-4. **Пример ответа**: Короткий пример ответа в 2-3 предложениях
-Отвечай на русском. Будь максимально лаконичен.`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:streamGenerateContent?alt=sse`;
+        const prompt = `Ты senior-инженер, помогаешь кандидату на техническом собеседовании. Тебе дан аудиофрагмент голоса интервьюера.
 
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-          body: JSON.stringify({
+ПЕРВЫМ ДЕЛОМ определи: содержит ли аудио ВОПРОС или ЗАДАНИЕ кандидату?
+- Вопрос: прямой вопрос, просьба объяснить, задача, "расскажите о...", "как бы вы...", "что такое...", просьба написать код
+- НЕ вопрос: приветствие, small talk, комментарии, переходные фразы, тишина, шум, "давайте перейдём к...", "хорошо", "понятно"
+
+Если это НЕ ВОПРОС — ответь ТОЛЬКО одним словом: SKIP
+
+Если это ВОПРОС — дай РАЗВЁРНУТЫЙ и КОНКРЕТНЫЙ ответ, который кандидат может пересказать своими словами:
+
+**Суть**: одно предложение — что спрашивают
+**Ответ**: подробный ответ на 12-15 предложений. Структурируй по блокам если это system design:
+- **Компоненты**: какие сервисы, БД, кэши, очереди нужны и почему именно они
+- **Потоки данных**: как данные проходят через систему, write path и read path
+- **Хранение**: схема данных, выбор БД (SQL vs NoSQL), индексы, партиционирование
+- **Масштабирование**: шардирование, репликация, load balancing, CDN
+- **Надёжность**: отказоустойчивость, graceful degradation, мониторинг
+- **Расчёты**: примерные QPS, объём данных, latency requirements
+Используй конкретные технологии, паттерны, цифры, trade-offs. Объясняй КАК и ПОЧЕМУ.
+Если это вопрос по архитектуре ПО — раскрой:
+- **Паттерны**: CQRS, Event Sourcing, Saga, Circuit Breaker, Strangler Fig, Outbox, etc. — когда применять и почему
+- **Принципы**: SOLID, DDD (bounded contexts, aggregates, domain events), Clean/Hexagonal Architecture, разделение слоёв
+- **Коммуникация сервисов**: sync (REST, gRPC) vs async (Kafka, RabbitMQ, SQS), choreography vs orchestration, idempotency
+- **Обработка ошибок**: retry с exponential backoff, dead letter queues, compensating transactions, eventual consistency
+- **Observability**: distributed tracing (Jaeger/Zipkin), structured logging, метрики (RED/USE), alerting
+- **Тестирование**: contract tests, integration tests, chaos engineering
+Если это алгоритмическая задача — опиши подход пошагово, сложность O(), структуры данных, edge cases.
+
+Отвечай на русском. Давай ответ такой глубины, какой ожидают от senior/staff кандидата.`;
+
+        // Each hint gets a unique ID so parallel streams don't conflict
+        const hintId = ++hintIdCounter;
+        let accumulated = "";
+        let isSkip = false;
+
+        // Add placeholder with unique ID
+        setSuggestions(prev => [{ id: hintId, text: "⏳ Слушаю..." }, ...prev].slice(0, 10));
+
+        await streamSSE(
+          url,
+          {
             contents: [{
               parts: [
                 { text: prompt },
                 { inlineData: { mimeType: "audio/wav", data: data } }
               ]
             }]
-          })
-        });
+          },
+          (chunk) => {
+            accumulated += chunk;
+            // Check if AI decided this is not a question
+            const trimmed = accumulated.trim();
+            if (trimmed === "SKIP" || trimmed === "SKIP." || trimmed.startsWith("SKIP\n") || trimmed.startsWith("SKIP ")) {
+              isSkip = true;
+              // Remove this specific hint by ID
+              setSuggestions(prev => prev.filter(h => h.id !== hintId));
+              return;
+            }
+            if (isSkip) return;
+            // Update only this specific hint by ID
+            setSuggestions(prev =>
+              prev.map(h => h.id === hintId ? { ...h, text: accumulated } : h)
+            );
+          }
+        );
 
-        const resData = await response.json();
-        const hint = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (hint) setSuggestions(prev => [hint, ...prev].slice(0, 10));
+        // Remove if empty or skipped
+        if (!accumulated || isSkip) {
+          setSuggestions(prev => prev.filter(h => h.id !== hintId));
+        }
       } catch (e) { console.error(e); }
     });
     return () => { unlisten.then(f => f()); };
@@ -178,58 +268,39 @@ function App() {
     setInput("");
     setIsLoading(true);
 
-    if (typingTimerRef.current !== null) {
-      clearInterval(typingTimerRef.current);
-      typingTimerRef.current = null;
-    }
-
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:streamGenerateContent?alt=sse`;
       abortRef.current = new AbortController();
-      const r = await fetch(url, {
-        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({ contents: [{ parts: [{ text }] }] }),
-        signal: abortRef.current.signal
-      });
-      if (!r.ok) {
-        const errorText = await r.text();
-        console.error(`API Error: ${r.status} ${errorText}`);
-        throw new Error(`API Error ${r.status}: ${errorText}`);
-      }
-      const d = await r.json();
-      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "No text generated";
 
+      // Add empty model message
       setMessages(prev => [...prev, { role: "model", content: "" }]);
 
-      const full = answer;
-      let index = 0;
+      await streamSSE(
+        url,
+        { contents: [{ parts: [{ text }] }] },
+        (chunk) => {
+          setMessages(prev => {
+            if (prev.length === 0) return prev;
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (!last || last.role !== "model") return prev;
+            next[next.length - 1] = { ...last, content: last.content + chunk };
+            return next;
+          });
 
-      typingTimerRef.current = window.setInterval(() => {
-        index += 2;
-
-        setMessages(prev => {
-          if (prev.length === 0) return prev;
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (!last || last.role !== "model") return prev;
-          next[next.length - 1] = { ...last, content: full.slice(0, index) };
-          return next;
-        });
-
-        if (scrollRef.current) {
-          const el = scrollRef.current;
-          el.scrollTop = el.scrollHeight;
-        }
-
-        if (index >= full.length) {
-          if (typingTimerRef.current !== null) {
-            clearInterval(typingTimerRef.current);
-            typingTimerRef.current = null;
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
           }
-          setIsLoading(false);
-        }
-      }, 14);
+        },
+        abortRef.current.signal
+      );
+
+      setIsLoading(false);
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setIsLoading(false);
+        return;
+      }
       console.error(e);
       setMessages(prev => [...prev, { role: "model", content: `❌ ${e instanceof Error ? e.message : String(e)}` }]);
       setIsLoading(false);
@@ -240,77 +311,52 @@ function App() {
     if (!apiKey || isLoading) return;
     setIsLoading(true);
 
-    if (typingTimerRef.current !== null) {
-      clearInterval(typingTimerRef.current);
-      typingTimerRef.current = null;
-    }
-
     try {
       const screenshotBase64 = await invoke<string>("capture_screenshot");
 
       setMessages(prev => [...prev, { role: "user", content: "📷 [Screenshot captured]" }]);
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:streamGenerateContent?alt=sse`;
       const prompt = "Проанализируй этот скриншот. Если видишь задачу, код, вопрос или проблему - помоги решить, объясни или дай рекомендации на русском языке.";
 
       abortRef.current = new AbortController();
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
+
+      // Add empty model message
+      setMessages(prev => [...prev, { role: "model", content: "" }]);
+
+      await streamSSE(
+        url,
+        {
           contents: [{
             parts: [
               { text: prompt },
-              {
-                inlineData: {
-                  mimeType: "image/png",
-                  data: screenshotBase64
-                }
-              }
+              { inlineData: { mimeType: "image/png", data: screenshotBase64 } }
             ]
           }]
-        }),
-        signal: abortRef.current.signal
-      });
+        },
+        (chunk) => {
+          setMessages(prev => {
+            if (prev.length === 0) return prev;
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (!last || last.role !== "model") return prev;
+            next[next.length - 1] = { ...last, content: last.content + chunk };
+            return next;
+          });
 
-      if (!r.ok) {
-        const errText = await r.text();
-        throw new Error(`API Error ${r.status}: ${errText}`);
-      }
-      const d = await r.json();
-      const answer: string = d.candidates?.[0]?.content?.parts?.[0]?.text || "No analysis provided";
-
-      setMessages(prev => [...prev, { role: "model", content: "" }]);
-
-      const full = answer;
-      let index = 0;
-
-      typingTimerRef.current = window.setInterval(() => {
-        index += 2;
-
-        setMessages(prev => {
-          if (prev.length === 0) return prev;
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (!last || last.role !== "model") return prev;
-          next[next.length - 1] = { ...last, content: full.slice(0, index) };
-          return next;
-        });
-
-        if (scrollRef.current) {
-          const el = scrollRef.current;
-          el.scrollTop = el.scrollHeight;
-        }
-
-        if (index >= full.length) {
-          if (typingTimerRef.current !== null) {
-            clearInterval(typingTimerRef.current);
-            typingTimerRef.current = null;
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
           }
-          setIsLoading(false);
-        }
-      }, 14);
+        },
+        abortRef.current.signal
+      );
+
+      setIsLoading(false);
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setIsLoading(false);
+        return;
+      }
       console.error(e);
       setMessages(prev => [...prev, { role: "model", content: `Ошибка при захвате скриншота: ${e}` }]);
       setIsLoading(false);
@@ -508,15 +554,15 @@ function App() {
                     </div>
                   </div>
                 )}
-                {suggestions.map((s, i) => (
+                {suggestions.map((hint) => (
                   <motion.div
-                    key={i}
+                    key={hint.id}
                     initial={{ x: -12, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
                     transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
                     className="settings-card-m3 voice-hint-card"
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{s}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{hint.text}</ReactMarkdown>
                   </motion.div>
                 ))}
               </div>

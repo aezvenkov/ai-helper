@@ -328,15 +328,15 @@ fn check_and_send_buffer(
     speaker: &str,
     current_amp: i16,
 ) {
-    // Send every ~3 seconds of audio
-    let limit = sample_rate as usize * channels as usize * 3;
+    // Send every ~6 seconds of audio (longer buffer = more context, fewer false triggers)
+    let limit = sample_rate as usize * channels as usize * 6;
 
     if buf.len() > limit {
         let pcm_data = std::mem::take(buf);
         let max_amp = pcm_data.iter().map(|x| x.abs()).max().unwrap_or(0);
 
-        // Only send to API if there is meaningful audio (amplitude > 100)
-        if max_amp > 100 {
+        // Only send to API if there is meaningful speech (amplitude > 800 filters breaths/noise)
+        if max_amp > 800 {
             let wav_data = create_wav_data(sample_rate, channels, &pcm_data);
             let b64 = general_purpose::STANDARD.encode(wav_data);
             let _ = app.emit("audio-chunk", AudioPayload {
